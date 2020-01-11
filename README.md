@@ -8,4 +8,4 @@ Here's some features:
 - you can attach files to comments
 - you can add other people to your task list to work together
 
-Here you can see it in action: https://www.tasker.ml
+Here you can see it in action: https://tasker.ml

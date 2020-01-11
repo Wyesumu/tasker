@@ -1,0 +1,21 @@
+{% extends 'layout.html' %}
+{% block title %}Welcome!{% endblock %}
+{% block content %}
+<div class="jumbotron">
+  <h1 class="display-4">Welcome to the Tasker!</h1>
+  <p class="lead">Tasker is a simple task-manager with tasks, sub-tasks and calendar. It can be easily used for personal and team purposes.</p>
+  <h4>What you can:</h4>
+  <ul>
+    <li>Create as many task list as you want</li>
+    <li>Add different people to your task list and work in a team</li>
+    <li>Create as many subtasks as you want in any task and in any subtask too</li>
+    <li>Set date in the task so it will appear in your calendar</li>
+  </ul>
+  <hr class="my-4">
+  <p>You don't have any task list yet, so let's create one!</p>
+  <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#newListModal">
+    Create new task list
+  </button>
+</div>
+
+{% endblock %}

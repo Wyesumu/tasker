@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Login</title>
+    <link rel="stylesheet" href="static/bootstrap.css">
+    <link rel="stylesheet" href="static/styles.css">
+    <link rel="stylesheet" href="static/login.css">
+  </head>
+  <body>
+    <div class="container">
+  <div class="wrapper fadeInDown">
+    <div id="formContent">
+      {% for message in get_flashed_messages() %}
+    <div class="alert alert-warning">
+      {{message}}
+    </div>
+    {%endfor%}
+      <!-- Login Form -->
+      <form action="" method="POST">
+        <h4 class="fadeIn first" style="padding-top: 2%">Welcome!</h4>
+        <input type="text" id="login" class="fadeIn second" name="login" placeholder="Login">
+        <input type="password" id="password" class="fadeIn third" name="password" placeholder="Password">
+        <input type="submit" class="fadeIn fourth" value="Log In">
+      </form>
+      <div id="formFooter">
+        <a class="underlineHover" href="/register">Регистрация</a>
+      </div>
+    </div>
+  </div>
+    </div>
+  </body>
+</html>

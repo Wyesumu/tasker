@@ -1,0 +1,64 @@
+{% extends 'task_page.html' %}
+{% block title %}New task{% endblock %}
+
+{% block header%}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/gijgo/1.9.13/combined/css/gijgo.min.css" rel="stylesheet" type="text/css" />
+{% endblock %}
+
+{% block task_box %}
+<div class="col" style="padding-bottom: 15px">
+    <div class="card bg-light">
+      <div class="card-header">
+          <ul class="nav nav-pills card-header-pills">
+            <li class="nav-item">
+              <a class="btn" href="{{url_for('index', task_id=request.args.get('parent_id'), list_id=request.args.get('list_id'))}}">
+                <span>
+                  <svg id="i-chevron-left" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" fill="none" stroke="currentcolor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                    <path d="M20 30 L8 16 20 2" />
+                  </svg>
+                </span>
+                Back
+              </a>
+            </li>
+          </ul>
+      </div>
+
+      <div class="card-body">
+        <form action="" method="POST">
+          <div class="col" style="width: 40rem">
+            <div class="input-group">
+              <select class="custom-select" id="inputGroupSelect01" name="task_list_task">
+                {%for item in user.task_lists%}
+                  <option {%if task_list.id == item.id %}selected{%endif%} value="{{item.id}}">{{item}}</option>
+                {%endfor%}
+              </select>
+            </div>
+            <input name="title" type="text" class="form-control my-1" autocomplete="off" placeholder="Enter task title" 
+            {%if edit -%}
+              value="{{edit.title}}"
+            {%- endif%}>
+            <textarea name="details" class="form-control my-1" rows="5" autocomplete="off" placeholder="Enter task details">
+              {%- if edit -%}
+                {{edit.details}}
+              {%- endif -%}
+            </textarea>
+            <input id="time_input" name="time_input"
+            {%if edit -%}
+              {% if edit.date %}
+                value='{{edit.date.strftime("%Y-%m-%d %H:%M")}}'
+              {% endif %}
+            {%- endif%}>
+            <input type="submit" class="btn btn-primary float-right my-1" value="Confirm">
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block script%}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gijgo/1.9.13/combined/js/gijgo.min.js" type="text/javascript"></script>
+<script>
+  $('#time_input').datetimepicker({ footer: true, modal: true, format: 'yyyy-mm-dd HH:MM', uiLibrary: 'bootstrap4' });
+</script>
+{% endblock %}

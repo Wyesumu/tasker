@@ -12,6 +12,7 @@ from datetime import datetime as dt
 from flask_bcrypt import Bcrypt
 #os for file processing
 import os
+from json import dumps as json_dumps
 #image processings
 #from PIL import Image as ProcessImage
 #from PIL import ImageFont, ImageFilter, ImageDraw
@@ -20,8 +21,8 @@ import os
 #https connection
 #from OpenSSL import SSL
 #flask_admin
-#from flask_admin import Admin, AdminIndexView, expose
-#from flask_admin.contrib.sqla import ModelView
+from flask_admin import Admin, AdminIndexView, expose
+from flask_admin.contrib.sqla import ModelView
 
 app = flask.Flask(__name__)
 
@@ -41,6 +42,11 @@ task_lists = db.Table('task_lists',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
 )
 
+task_followers = db.Table('task_followers',
+    db.Column('task_id', db.Integer, db.ForeignKey('task.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
+)
+
 class User(db.Model):
 
 	id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -52,6 +58,8 @@ class User(db.Model):
 	comments = db.relationship('Comment', backref='user', lazy=True)
 	task_lists = db.relationship('Task_list', secondary=task_lists, lazy='subquery',
         backref=db.backref('users', lazy=True))
+	task_following = db.relationship('Task', secondary=task_followers, lazy='subquery',
+        backref=db.backref('followers', lazy=True))
 
 	def __repr__(self):
 		return self.username
@@ -68,6 +76,27 @@ class Task(db.Model):
 	task_list_id = db.Column(db.Integer, db.ForeignKey("task_list.id"), nullable=False)
 	comments = db.relationship('Comment', backref='task', lazy=True)
 	closed = db.Column(db.Boolean)
+	#got_update = db.Column(db.Boolean)
+
+	def follow(self, creator_id):
+		for user in self.task_list.users:
+			if user.id != creator_id:
+				self.followers.append(user)
+		if self.parent_task:
+			self.parent_task.follow(creator_id)
+		return True
+
+	def unfollow(self, user):
+		if user in self.followers: #if user unread the task
+			has_unread = False
+			for sub_task in self.sub_task: #list all negighbours for current task
+				if sub_task in user.task_following: #if neighbour unread
+					has_unread = True
+			if not has_unread:
+				self.followers.remove(user)
+			if self.parent_task: #if task has parent task
+				self.parent_task.unfollow(user)			
+		return True
 
 	def __repr__(self):
 		return self.title
@@ -86,6 +115,33 @@ class Task_list(db.Model):
 	id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 	name = db.Column(db.String())
 	tasks = db.relationship('Task', backref='task_list', lazy=True)
+	task_order = db.Column(db.String())
+
+	def get_order(self):
+		if self.task_order:
+			return self.task_order.split(',')
+		else:
+			l = []
+			for task in self.tasks:
+				l.append(task.id)
+			return l
+
+	def set_order(self, new_order):
+		self.task_order = ','.join(map(str, new_order))
+		return True
+
+	def add_to_order(self, task_id):
+		order = self.get_order()
+		order.append(task_id)
+		self.set_order(order)
+		return True
+
+	def rem_from_order(self, task_id):
+		order = self.get_order()
+		while str(task_id) in order:
+			order.pop(order.index(str(task_id)))
+		self.set_order(order)
+		return True
 
 	def __repr__(self):
 		return self.name
@@ -134,8 +190,8 @@ def user_allowed(func): # check if user in task_list
 				else:
 					flask.flash("Sorry, you have no access to the task list you requested")
 					return flask.redirect(flask.url_for("index"))
-			except:
-				return page_not_found(404)
+			except Exception as e:
+				return page_not_found(e)
 		else:
 			return flask.render_template("new_user.html", user=user)
 	return wrapper
@@ -145,28 +201,26 @@ def user_allowed(func): # check if user in task_list
 #------------------<flask_admin>--------------------------------
 
 #restict access to /admin index
-#class MyAdminIndexView(AdminIndexView):
-#
-#	def is_visible(self):
-#		return False
-#
+class MyAdminIndexView(AdminIndexView):
+
+	def is_visible(self):
+		return False
+
 #list of users in admin
-#class UserView(ModelView):
-#	column_display_pk = True
+class UserView(ModelView):
+	column_display_pk = True
 
-#class TaskView(ModelView):
-#
-#	column_display_pk = True
+class TaskView(ModelView):
+	column_display_pk = True
 
-#class TaskListView(ModelView):
-#
-#	column_display_pk = True
+class TaskListView(ModelView):
+	column_display_pk = True
 
 #initialize admin views
-#admin = Admin(app, name='admin', template_mode='bootstrap3', index_view=MyAdminIndexView(), url='/')
-#admin.add_view(UserView(User, db.session, 'Пользователи', url='/admin/user'))
-#admin.add_view(TaskView(Task, db.session, 'Tasks', url='/admin/tasks'))
-#admin.add_view(TaskListView(Task_list, db.session, 'Task lists', url='/admin/lists'))
+admin = Admin(app, name='admin', template_mode='bootstrap3', index_view=MyAdminIndexView(), url='/')
+admin.add_view(UserView(User, db.session, 'Пользователи', url='/admin/user'))
+admin.add_view(TaskView(Task, db.session, 'Tasks', url='/admin/tasks'))
+admin.add_view(TaskListView(Task_list, db.session, 'Task lists', url='/admin/lists'))
 
 #---------------------/flask_admin/---------------------
 
@@ -266,11 +320,20 @@ def exit():
 #All info about current position (task_list and task) are stored in url arguments
 #
 
+@app.route('/update_order', methods=["GET","POST"])
+def update_order():
+	list_id = flask.request.args.get('list_id', default = User.query.get(flask.session['user_id']).task_lists[-1].id, type = int)
+
+	task_list = Task_list.query.get(list_id)
+	task_list.task_order = str(flask.request.json)
+	db.session.commit()
+	return json_dumps({'success': True}), 200, {'ContentType':'application/json'} 
+
 @app.errorhandler(404)
 def page_not_found(error):
-   return flask.render_template('404.html', title = '404'), 404
+	return flask.render_template('404.html', title = '404', error = error), 404
 
-@app.route("/", methods=["GET","POST"])
+@app.route("/", methods=["GET"])
 @is_logged
 @user_allowed
 def index():
@@ -278,44 +341,59 @@ def index():
 	list_id = flask.request.args.get('list_id', default = User.query.get(flask.session['user_id']).task_lists[-1].id, type = int)
 	task_id = flask.request.args.get('task_id', default = None, type = int)
 
-	if flask.request.method == "POST":
-		new_comment = Comment(user_id = flask.session['user_id'],
-			task_id = task_id,
-			text = flask.request.form['comment'],
-			date = dt.now())
-		db.session.add(new_comment)
-
-		if 'file' not in flask.request.files:
-			flask.flash('Ошибка, файл не найден. Обратитесь к администратору')
-			return flask.redirect(flask.request.url)
-
-		files = flask.request.files.getlist("file")
-		if not files[0].filename == '': # if filename is empty
-			db.session.flush()
-
-			for file in files: #save every file
-				file.save(os.path.join(config.UPLOAD_FOLDER, file.filename)) #save this file
-				new_file = File(task_id = new_comment.id, file_name = file.filename)
-				db.session.add(new_file)
-
-		db.session.commit()
-		return flask.redirect(flask.url_for("index", list_id = list_id, task_id = task_id))
+	if task_id:
+		task = Task.query.get(task_id)
+		if task:
+			task.unfollow(User.query.get(flask.session['user_id']))
+			db.session.commit()
 	else:
-		if task_id:
-			task = Task.query.get(task_id)
-		else:
-			task = None
+		task = None
 
-		return flask.render_template("task.html", 
-			task_list = Task_list.query.get(list_id),
-			task = task,
-			user = User.query.get(flask.session['user_id']))
+	return flask.render_template("task.html", 
+		task_list = Task_list.query.get(list_id),
+		task = task,
+		user = User.query.get(flask.session['user_id']))
+
+@app.route("/new_comment", methods=["POST"])
+@is_logged
+@user_allowed
+def new_comment():
+
+	task_id = flask.request.args.get('task_id', default = None, type = int)
+
+	new_comment = Comment(user_id = flask.session['user_id'],
+		task_id = task_id,
+		text = flask.request.form['comment'],
+		date = dt.now())
+	db.session.add(new_comment)
+
+	task = Task.query.get(task_id)
+	task.follow(flask.session['user_id']) #mark task as unread
+
+	if 'file' not in flask.request.files:
+		flask.flash('File not found.')
+		return flask.redirect(flask.request.url)
+
+	files = flask.request.files.getlist("file")
+	if not files[0].filename == '': # if filename is empty
+		db.session.flush()
+
+		for file in files: #save every file
+			file.save(os.path.join(config.UPLOAD_FOLDER, file.filename)) #save this file
+			new_file = File(task_id = new_comment.id, file_name = file.filename)
+			db.session.add(new_file)
+
+	db.session.commit()
+	return flask.redirect(flask.url_for("index", task_id = task_id))
+
 
 @app.route("/remove_list", methods=["POST"])
 @is_logged
 @user_allowed
 def remove_list():
+
 	task_list = Task_list.query.get(flask.request.args.get('list_id', type = int))
+
 	for task in task_list.tasks:
 		db.session.delete(Task.query.get(task.id))
 	db.session.delete(task_list)
@@ -328,9 +406,15 @@ def remove_list():
 @is_logged
 @user_allowed
 def close_task():
-	print(flask.request.args.get("backurl"))
+	#print(flask.request.args.get("backurl"))
+
 	task = Task.query.get(flask.request.args.get("target", type=int))
+
+	if task.parent_task: #if task has a parent then mark it as unread for all users except current user
+		task.follow(flask.session['user_id'])
+
 	task.closed = True
+	Task_list.query.get(task.task_list_id).rem_from_order(task.id)
 	for child in task.sub_task:
 		child.closed = True
 	db.session.commit()
@@ -342,13 +426,19 @@ def close_task():
 @is_logged
 @user_allowed
 def remove_task():
+
 	task = Task.query.get(flask.request.args.get("target", type=int))
+
+	Task_list.query.get(task.task_list_id).rem_from_order(task.id)
 	for comment in task.comments:
 		db.session.delete(Comment.query.get(comment.id))
+	for sub_task in task.sub_task:
+		db.session.delete(sub_task)
 	db.session.delete(task)
 	db.session.commit()
 
 	return flask.redirect(flask.url_for("index", list_id = flask.request.args.get('list_id', type = int), task_id = flask.request.args.get('task_id', type = int)))
+
 
 @app.route("/new_task", methods=["GET","POST"])
 @is_logged
@@ -364,13 +454,26 @@ def new_task():
 		else:
 			time = dt.strptime(flask.request.form['time_input'], "%Y-%m-%d %H:%M")
 
-		new_task = Task(user_id = flask.session['user_id'], 
+		if flask.request.form['parent_task'] == '':
+			parent_task_id = flask.request.args.get('parent_id', default=None, type=int)
+		else:
+			parent_task_id = flask.request.form['parent_task']
+
+		new_task = Task(user_id = flask.request.form['task_executor'], 
 			title = flask.request.form['title'], 
 			details = flask.request.form['details'], 
 			task_list_id = flask.request.form['task_list_task'],
 			date = time,
-			parent_task_id = flask.request.args.get('parent_id', default=None, type=int))
+			parent_task_id = parent_task_id)
 		db.session.add(new_task)
+		db.session.flush()
+
+		if not parent_task_id: #if task doesn't have a parent
+			Task_list.query.get(list_id).add_to_order(new_task.id) #then add it to orderlist
+			new_task.follow(flask.session['user_id'])
+		else: #if task has a parent then mark it as unread for users
+			new_task.follow(flask.session['user_id'])  
+
 		db.session.commit()
 
 		return flask.redirect(flask.url_for("index", list_id = list_id, task_id = new_task.id))
@@ -379,6 +482,7 @@ def new_task():
 		return flask.render_template("new_task.html", 
 			user = User.query.get(flask.session['user_id']), 
 			task_list = Task_list.query.get(list_id))
+
 
 @app.route("/edit_task", methods=["GET","POST"])
 @is_logged
@@ -395,11 +499,23 @@ def edit_task():
 		else:
 			time = dt.strptime(flask.request.form['time_input'], "%Y-%m-%d %H:%M")
 
+		if flask.request.form['parent_task'] == '':
+			parent_task_id = None
+		else:
+			parent_task_id = flask.request.form['parent_task']
+
+		if flask.request.form['task_executor'] == '':
+			task_executor = flask.session['user_id']
+		else:
+			task_executor = flask.request.form['task_executor']
+
 		edit_task = Task.query.get(task_id)
+		edit_task.user_id = task_executor
 		edit_task.title = flask.request.form['title']
 		edit_task.details = flask.request.form['details']
 		edit_task.date = time
 		edit_task.task_list_id = flask.request.form['task_list_task']
+		edit_task.parent_task_id = parent_task_id
 		db.session.commit()
 
 		return flask.redirect(flask.url_for("index", list_id = list_id, task_id = edit_task.id))
@@ -409,6 +525,7 @@ def edit_task():
 			user = User.query.get(flask.session['user_id']), 
 			task_list = Task_list.query.get(list_id),
 			edit = Task.query.get(task_id))
+
 
 @app.route("/closed", methods=["GET", "POST"])
 @is_logged
@@ -421,6 +538,10 @@ def closed():
 	if flask.request.method == "POST":
 		task = Task.query.get(flask.request.args.get("target"))
 		task.closed = False
+
+		task.follow(flask.session['user_id'])  
+		Task_list.query.get(list_id).add_to_order(task.id)
+
 		db.session.commit()
 
 		return flask.redirect(flask.url_for("index", list_id = list_id, task_id = task_id))

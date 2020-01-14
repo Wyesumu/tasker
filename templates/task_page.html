@@ -4,7 +4,7 @@
 <div class="row p-1">
   <div class="col-12 col-md-4 order-12 order-md-0 col-xl-3">
     <div class="card-header border">
-      <ul class="nav nav-pills card-header-pills">
+      <ul class="nav nav-pills card-header-pills" id="task_list_nav">
         <li class="nav-item col-md-9">
           <h4 class="my-1 ml-2">Active tasks in {{task_list.name}}</h4>
         </li>
@@ -17,6 +17,9 @@
             </svg>
           </button>
           <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown-1">
+            <button type="button" class="dropdown-item btn btn-e-blue" id = "sort_switcher">
+              Reorder tasks
+            </button>
             <button type="button" class="dropdown-item btn btn-e-blue" data-toggle="modal" data-target="#editListModal">
               Edit list
             </button>
@@ -27,14 +30,14 @@
               Tree view
             </button>
             <div class="dropdown-divider"></div>
-            <form action="/remove_list?{{request.query_string.decode('utf-8')}}" method="POST">
-              <input type="submit" class="dropdown-item btn btn-e-red" value="Remove">
-            </form>
+            <button type="button" class="dropdown-item btn btn-e-red" data-toggle="modal" data-target="#deleteListModal">
+              Remove
+            </button>
           </div>
         </li>
       </ul>
     </div>
-    <div class="list-group">
+    <ul class="list-group" id="sortable_tasks">
     {% if request.path == "/closed" %}
       {% for task in task_list.tasks %}
         {% if not task.parent_task_id and task.closed %}
@@ -49,30 +52,35 @@
         {% endif %}
       {% endfor %}
     {% else %}
-      {% for task in task_list.tasks %}
-        {% if not task.parent_task_id and not task.closed %}
-        <a href="{{url_for('index', task_id = task.id, list_id = request.args.get('list_id'))}}" class="list-group-item list-group-item-action">
-          <div class="d-flex w-100">
-            <h5 class="mb-1">{{task.title}}</h5>
-          </div>
-          <p class="mb-1">
-            {{task.details}}
-          </p>
-          {% if task.date %}
-          <small 
-            {% if task.date < task.date.now() %} 
-              style='color: red'
-            {%endif%}
-          >
-            <svg id="i-clock" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="16" height="16" fill="none" stroke="currentcolor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
-              <circle cx="16" cy="16" r="14" />
-              <path d="M16 8 L16 16 20 20" />
-            </svg>
-            {{task.date.strftime("%Y-%m-%d %H:%M")}}
-          </small>
+      {% for id in task_list.get_order() %}
+        {% for task in task_list.tasks %}
+          {% if not task.parent_task_id and not task.closed %}
+            {% if task.id == id|int %}
+              <li data-id="{{task.id}}" class="list-group-item list-group-item-action">
+                <a href="{{url_for('index', task_id = task.id, list_id = request.args.get('list_id'))}}" class="list-group-item-action">
+                  <div class="d-flex w-100">
+                    <h5 class="mb-1">{{task.title}}{% if user in task.followers %}<span class="badge badge-primary ml-2">New</span>{%endif%}</h5>
+                  </div>
+                  <p class="mb-1">
+                    {{task.details}}
+                  </p>
+                  {% if task.date %}
+                    <small
+                      {% if task.date < task.date.now() %} 
+                        style='color: red'
+                      {%endif%}>
+                      <svg id="i-clock" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="16" height="16" fill="none" stroke="currentcolor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                        <circle cx="16" cy="16" r="14" />
+                        <path d="M16 8 L16 16 20 20" />
+                      </svg>
+                      {{task.date.strftime("%Y-%m-%d %H:%M")}}
+                    </small>
+                  {% endif %}
+                </a>
+              </li>
+            {% endif %}
           {% endif %}
-        </a>
-        {% endif %}
+        {% endfor %}
       {% endfor %}
         <a href="{{url_for('new_task', list_id = request.args.get('list_id'))}}" class="list-group-item list-group-item-action">
           <div class="d-flex w-100">
@@ -85,7 +93,7 @@
           </div>
         </a>
       {% endif %}
-    </div>
+    </ul>
   </div>
   {% block task_box %}
   {% endblock %}
@@ -187,5 +195,78 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="deleteListModal" tabindex="-1" role="dialog" aria-labelledby="deleteListModal" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title" id="exampleModalLabel">Are you sure you want to delete {{task_list.name}}?</h4>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form class="ml-auto mr-auto" style="width: fit-content" action="/remove_list?{{request.query_string.decode('utf-8')}}" method="POST">
+          <button type="button" class="btn btn-primary" data-dismiss="modal">Cancel</button>
+          <input type="submit" class="btn btn-danger" value="Remove">
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script type="text/javascript">
+  var el = document.getElementById('sortable_tasks');
+  var sortable = Sortable.create(el, {disabled:true});
+
+document.getElementById("sort_switcher").onclick = function () {
+  var state = sortable.option("disabled"); // get
+
+  sortable.option("disabled", !state); // set
+
+  var node = document.createElement("LI");
+  node.classList.add('w-100');
+
+  if (document.getElementById("end_sort_button") == null){
+    var button = document.createElement("button");
+    button.innerHTML = "Exit reordering mode";
+    button.id = "end_sort_button";
+    button.classList.add('btn');
+    button.classList.add('btn-success');
+    button.classList.add('w-100');
+    node.appendChild(button);   
+
+    document.getElementById("task_list_nav").appendChild(node);
+    button.addEventListener ("click", function() {
+      var state = sortable.option("disabled"); // get
+      sortable.option("disabled", !state);
+      button.parentNode.removeChild(button);
+      var data = sortable.toArray().join()
+      console.log(data)
+
+      $.ajax({
+        type : "POST",
+        url : "{{ url_for('update_order', list_id = request.args.get('list_id')) }}",
+        data: JSON.stringify(data, null, '\t'),
+        contentType: 'application/json;charset=UTF-8',
+        success: function(result) {
+          console.log(result);
+        }
+      });
+    });
+  }
+};
+
+// Add the following code if you want the name of the file appear on select
+$(".custom-file-input").on("change", function() {
+  var fileName = $(this).val().split("\\").pop();
+  $(this).siblings(".custom-file-label").addClass("selected").html(fileName);
+});
+</script>
 
 {% endblock %}

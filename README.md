@@ -1,6 +1,7 @@
 Tasker is a really simple task manager with one tasks can be parents of the other tasks recursively.
 Here's some features:
 - you can create task list (any amount of it)
+- you can reorder tasks as you want in tasklist
 - you can create task with timer
 - all your tasks with timer will be displayed in calendar
 - you can create subtask in task and also subtask in subtask and so on

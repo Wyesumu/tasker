@@ -1,20 +1,32 @@
 {% extends 'task_page.html' %}
 {% block task_box %}
+
+{% macro show_parent(task, count = 0) -%}
+    {% if task.parent_task %}
+      {% set count = count + 1 %}
+      {% if count < 3%}
+        {{show_parent(task.parent_task, count)}}
+      {% else %}
+        .../
+      {% endif %}
+      <li class="breadcrumb-item" title="{{task.parent_task.title}}">
+        <a href="{{ url_for('index', task_id = task.parent_task.id, list_id = task.parent_task.task_list_id) }}">
+          {{ task.parent_task.title[:16] }}{%if task.parent_task.title|length > 16%}...{%endif%}
+        </a>
+      </li>
+    {% endif %}
+{%- endmacro %}
+
 {% if task %}
   <div class="col" style="padding-bottom: 15px">
     <div class="card bg-light">
       <div class="card-header">
         <ul class="nav nav-pills card-header-pills">
-          {% if task.parent_task_id %}
+          {% if task.parent_task %}
           <li class="nav-item">
-            <a class="btn" href="{{url_for('index', task_id=task.parent_task_id, list_id=request.args.get('list_id'))}}">
-              <span>
-                <svg id="i-chevron-left" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" fill="none" stroke="currentcolor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
-                  <path d="M20 30 L8 16 20 2" />
-                </svg>
-              </span>
-              Back
-            </a>
+            <ol class="breadcrumb mb-0">
+              {{show_parent(task)}}
+            </ol>
           </li>
           {% endif %}
           {% if task.date %}

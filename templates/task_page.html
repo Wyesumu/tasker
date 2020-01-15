@@ -6,7 +6,7 @@
     <div class="card-header border">
       <ul class="nav nav-pills card-header-pills" id="task_list_nav">
         <li class="nav-item col-md-9">
-          <h4 class="my-1 ml-2">Active tasks in {{task_list.name}}</h4>
+          <h4 class="my-1 ml-2">{% if request.path == "/closed" %}Closed tasks {%else%} Active tasks{%endif%} in {{task_list.name}}</h4>
         </li>
         <li class="nav-item dropdown ml-auto">
           <button type="button" class="btn" href="#" id="navbarDropdown-1" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

@@ -1,4 +1,4 @@
-Tasker is a really simple task manager with one tasks can be parents of the other tasks recursively.
+Tasker is a really simple task manager where one tasks can be parents of the other tasks recursively.
 Here's some features:
 - you can create task list (any amount of it)
 - you can reorder tasks as you want in tasklist
